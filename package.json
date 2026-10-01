@@ -1,12 +1,13 @@
-{
+﻿{
   "name": "micualto-api",
   "version": "1.0.0",
   "private": true,
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "postinstall": "prisma generate",
     "build:shared": "npm run --prefix packages/shared build",
-    "build": "npm run build:shared && prisma generate && tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
@@ -50,5 +51,8 @@
     "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
