@@ -1,0 +1,1389 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ----------------------------------------------------
+// ENUMS
+// ----------------------------------------------------
+
+enum AccountType {
+  CHECKING          // Cuenta corriente
+  SAVINGS           // Cuenta de ahorros
+  CREDIT_CARD       // Tarjeta de crédito
+  DEBIT_CARD        // Tarjeta de débito ligada
+  CASH              // Efectivo físico
+  DIGITAL_WALLET    // Billetera digital (Mío, PayPal, etc.)
+  INVESTMENT        // Cuenta de inversión
+}
+
+enum Currency {
+  DOP
+  USD
+}
+
+enum TransactionType {
+  INCOME             // + cuenta destino (Ingreso)
+  EXPENSE            // - cuenta origen o + deuda tarjeta (Gasto)
+  TRANSFER           // - origen, + destino (Transferencia interna)
+  CARD_PAYMENT       // - cuenta bancaria, - deuda de tarjeta (Pago de tarjeta)
+  GOAL_CONTRIBUTION  // Reserva hacia meta (sin cambiar patrimonio neto)
+  GOAL_WITHDRAWAL    // Retiro de meta a disponible
+  DEBT_PAYMENT       // - cuenta, - deuda pasiva (Gasto solo parte intereses)
+  LOAN_COLLECTION    // + cuenta, - saldo por cobrar (Cobro préstamo)
+  ADJUSTMENT         // Conciliación / balance fix
+}
+
+enum TransactionStatus {
+  CONFIRMED
+  PENDING_REVIEW
+  VOID
+}
+
+enum TransactionSource {
+  MANUAL
+  EMAIL
+  SMS
+  IMPORT
+  RECURRING
+  WEBHOOK
+}
+
+enum GoalKind {
+  PURCHASE           // Meta de compra (laptop, vehículo, viaje) -> genera EXPENSE al finalizar
+  SAVINGS            // Fondo de emergencia, ahorro general
+}
+
+enum GoalMode {
+  VIRTUAL_ENVELOPE   // Sobre virtual (dinero en cuenta pero apartado)
+  LINKED_ACCOUNT     // Cuenta bancaria real vinculada
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum RecurrenceFrequency {
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  ANNUAL
+}
+
+enum OccurrenceStatus {
+  PENDING
+  PAID
+  SKIPPED
+}
+
+enum LoanType {
+  I_LENT             // Yo presté (cuenta por cobrar)
+  THEY_LENT          // Me prestaron (deuda que debo)
+}
+
+enum TransportServiceType {
+  UBER
+  DIDI
+  METRO_SANTO_DOMINGO
+  OMSA
+  PUBLIC_CONCHO
+  TOLL_PASO_RAPIDO
+  FUEL
+  PARKING
+  OTHER
+}
+
+enum RawEventSource {
+  EMAIL
+  SMS
+  WEBHOOK
+  UPLOAD
+}
+
+enum RawEventStatus {
+  PENDING
+  PROCESSED
+  FAILED
+  IGNORED
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+// NUEVOS ENUMS PARA SECURE GATE, VAULT, IDEALAB Y PROYECTOS DE VIDA
+enum SecureScope {
+  VAULT
+  IDEAS
+}
+
+enum DocumentCategory {
+  IDENTITY           // Cédula, pasaporte, licencia, acta de nacimiento
+  LEGAL_CONTRACTS    // Contratos de alquiler, laboral, NDA, poderes
+  PROPERTY_VEHICLES  // Títulos, matrícula, marbete, seguro de auto
+  FINANCIAL          // Contratos bancarios, impuestos DGII, garantías
+  BUSINESS           // RNC, registro mercantil, asambleas
+  EDUCATION_WORK     // Títulos, cartas laborales, CV
+  HEALTH             // Récords médicos, vacunas, recetas
+  FAMILY             // Documentos de familiares vinculados a Person
+  PHOTOS_MEMORIES    // Recuerdos valiosos
+  OTHER
+}
+
+enum DocumentStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  ARCHIVED
+}
+
+enum IdeaType {
+  PERSONAL           // 100% propia
+  COLLABORATIVE      // Con socios o copropietarios
+  THIRD_PARTY        // Negocio ajeno evaluando participar
+}
+
+enum IdeaStage {
+  SEED               // Semilla / Idea inicial
+  VALIDATING         // En validación de mercado
+  IN_DEVELOPMENT     // Prototipo / Construcción
+  LAUNCHED           // En operación
+  PAUSED             // En pausa temporal
+  DISCARDED          // Descartada (con lección aprendida)
+}
+
+enum LifeArea {
+  FINANCIAL_FREEDOM  // Libertad financiera y patrimonio
+  CAREER_BUSINESS    // Carrera y negocios
+  HEALTH_WELLNESS    // Salud física y mental
+  FAMILY_RELATIONSHIPS // Familia y pareja
+  PERSONAL_GROWTH    // Aprendizaje y desarrollo
+  LIFESTYLE_TRAVEL   // Viajes y estilo de vida
+}
+
+// ----------------------------------------------------
+// MODELO USER (CON USERNAME Y RELACIONES PROTEGIDAS)
+// ----------------------------------------------------
+
+model User {
+  id              String        @id @default(uuid())
+  username        String?       @unique // 3-30 caracteres
+  email           String        @unique
+  passwordHash    String
+  name            String
+  avatarUrl       String?
+  baseCurrency    Currency      @default(DOP)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  accounts        Account[]
+  categories      Category[]
+  merchants       Merchant[]
+  transactions    Transaction[]
+  goals           Goal[]
+  budgets         Budget[]
+  recurringTemplates RecurringTemplate[]
+  subscriptions   Subscription[]
+  debts           Debt[]
+  people          Person[]
+  loans           Loan[]
+  projects        Project[]
+  installmentPlans InstallmentPlan[]
+  statementImports StatementImport[]
+  rawEvents       RawEvent[]
+  merchantRules   MerchantRule[]
+  alerts          Alert[]
+  auditLogs       AuditLog[]
+  transportLogs   TransportLog[]
+  refreshTokens   RefreshToken[]
+
+  // Secure Gate, Bóveda, IdeaLab y Proyectos de Vida
+  secureSessions  SecureSession[]
+  securityEvents  SecurityEvent[]
+  vaultFolders    VaultFolder[]
+  vaultDocuments  VaultDocument[]
+  vaultTags       VaultTag[]
+  vaultAccessLogs VaultAccessLog[]
+  ideas           Idea[]
+  lifeProjects    LifeProject[]
+  quincenaPlans   QuincenaPlan[]
+  universityExpenses UniversityExpense[]
+  inventoryItems  PersonalInventoryItem[]
+  appCredentials  AppCredential[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model Bank {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  color       String    @default("#16a34a")
+  logo        String?
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  accounts    Account[]
+  rawEvents   RawEvent[]
+
+  @@map("banks")
+}
+
+model Account {
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankId          String?
+  bank            Bank?        @relation(fields: [bankId], references: [id], onDelete: SetNull)
+
+  name            String
+  type            AccountType
+  currency        Currency     @default(DOP)
+  
+  balance         Decimal      @default(0.0) @db.Decimal(14, 2)
+  creditLimit     Decimal?     @db.Decimal(14, 2)
+  
+  statementDay    Int?
+  dueDay          Int?
+  interestRate    Decimal?     @db.Decimal(5, 2)
+  last4           String?
+  accountNumber   String?
+  color           String       @default("#16a34a")
+  isArchived      Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  outgoingTransactions Transaction[] @relation("FromAccount")
+  incomingTransactions Transaction[] @relation("ToAccount")
+  linkedGoals          Goal[]        @relation("LinkedAccount")
+  cardStatements       CardStatement[]
+  recurringTemplates   RecurringTemplate[]
+  subscriptions        Subscription[]
+  installmentPlans     InstallmentPlan[]
+  statementImports     StatementImport[]
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Category {
+  id          String       @id @default(uuid())
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      Category?    @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    Category[]   @relation("CategoryHierarchy")
+
+  name        String
+  slug        String
+  icon        String       @default("tag")
+  color       String       @default("#16a34a")
+  type        String       @default("EXPENSE")
+  isTransport Boolean      @default(false)
+  isSystem    Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+
+  transactions       Transaction[]
+  budgetLines        BudgetLine[]
+  recurringTemplates RecurringTemplate[]
+  subscriptions      Subscription[]
+  merchantRules      MerchantRule[]
+
+  @@unique([userId, slug])
+  @@map("categories")
+}
+
+model Merchant {
+  id                  String       @id @default(uuid())
+  userId              String?
+  user                User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  normalizedName      String
+  defaultCategoryId   String?
+  icon                String?
+  isDigitalPlatform   Boolean      @default(false)
+  isTransportService  Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+
+  transactions       Transaction[]
+  subscriptions      Subscription[]
+  rules              MerchantRule[]
+  recurringTemplates RecurringTemplate[]
+
+  @@unique([userId, normalizedName])
+  @@map("merchants")
+}
+
+model Transaction {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type            TransactionType
+  amount          Decimal           @db.Decimal(14, 2)
+  currency        Currency          @default(DOP)
+  fxRate          Decimal           @default(1.0) @db.Decimal(10, 4)
+
+  accountId       String
+  account         Account           @relation("FromAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  toAccountId     String?
+  toAccount       Account?          @relation("ToAccount", fields: [toAccountId], references: [id], onDelete: Restrict)
+
+  categoryId      String?
+  category        Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  merchantId      String?
+  merchant        Merchant?         @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  projectId       String?
+  project         Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  goalId          String?
+  goal            Goal?             @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  debtId          String?
+  debt            Debt?             @relation(fields: [debtId], references: [id], onDelete: SetNull)
+
+  loanId          String?
+  loan            Loan?             @relation(fields: [loanId], references: [id], onDelete: SetNull)
+
+  status          TransactionStatus @default(CONFIRMED)
+  source          TransactionSource @default(MANUAL)
+  externalId      String?
+  dedupeHash      String?
+  reconciled      Boolean           @default(false)
+  notes           String?
+  receiptUrl      String?
+
+  occurredAt      DateTime          @default(now())
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+
+  transportLog         TransportLog?
+  debtPayments         DebtPayment[]
+  loanCollections      LoanCollection[]
+  recurringOccurrences RecurringOccurrence[]
+
+  @@index([userId, occurredAt])
+  @@index([accountId, occurredAt])
+  @@index([userId, dedupeHash])
+  @@map("transactions")
+}
+
+model TransportLog {
+  id              String               @id @default(uuid())
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionId   String               @unique
+  transaction     Transaction          @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  serviceType     TransportServiceType
+  origin          String?
+  destination     String?
+  distanceKm      Decimal?             @db.Decimal(6, 2)
+  notes           String?
+  tripDate        DateTime             @default(now())
+  createdAt       DateTime             @default(now())
+
+  @@index([userId, tripDate])
+  @@map("transport_logs")
+}
+
+model Goal {
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String
+  description     String?
+  kind            GoalKind     @default(PURCHASE)
+  mode            GoalMode     @default(VIRTUAL_ENVELOPE)
+  
+  targetAmount    Decimal      @db.Decimal(14, 2)
+  currentAmount   Decimal      @default(0.0) @db.Decimal(14, 2)
+  currency        Currency     @default(DOP)
+  targetDate      DateTime?
+  
+  linkedAccountId String?
+  linkedAccount   Account?     @relation("LinkedAccount", fields: [linkedAccountId], references: [id], onDelete: SetNull)
+
+  icon            String       @default("target")
+  color           String       @default("#16a34a")
+  status          GoalStatus   @default(ACTIVE)
+  
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  transactions    Transaction[]
+
+  @@index([userId])
+  @@map("goals")
+}
+
+model Budget {
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String
+  month           Int
+  year            Int
+  rolloverAmount  Decimal      @default(0.0) @db.Decimal(14, 2)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  lines           BudgetLine[]
+
+  @@unique([userId, month, year])
+  @@map("budgets")
+}
+
+model BudgetLine {
+  id              String       @id @default(uuid())
+  budgetId        String
+  budget          Budget       @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category     @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  budgetedAmount  Decimal      @db.Decimal(14, 2)
+  spentAmount     Decimal      @default(0.0) @db.Decimal(14, 2)
+  alertThreshold  Int          @default(80)
+
+  @@unique([budgetId, categoryId])
+  @@map("budget_lines")
+}
+
+model RecurringTemplate {
+  id              String              @id @default(uuid())
+  userId          String
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId       String
+  account         Account             @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  categoryId      String
+  category        Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  merchantId      String?
+  merchant        Merchant?           @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  name            String
+  amount          Decimal             @db.Decimal(14, 2)
+  currency        Currency            @default(DOP)
+  frequency       RecurrenceFrequency @default(MONTHLY)
+  dueDay          Int
+  isEstimated     Boolean             @default(false)
+  autoPay         Boolean             @default(false)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  occurrences     RecurringOccurrence[]
+
+  @@index([userId])
+  @@map("recurring_templates")
+}
+
+model RecurringOccurrence {
+  id              String            @id @default(uuid())
+  templateId      String
+  template        RecurringTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  dueDate         DateTime
+  status          OccurrenceStatus  @default(PENDING)
+  transactionId   String?
+  transaction     Transaction?      @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  createdAt       DateTime          @default(now())
+
+  @@index([templateId, dueDate])
+  @@map("recurring_occurrences")
+}
+
+model Subscription {
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  merchantId      String?
+  merchant        Merchant?    @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  accountId       String?
+  account         Account?     @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  categoryId      String?
+  category        Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  name            String
+  amount          Decimal      @db.Decimal(14, 2)
+  currency        Currency     @default(USD)
+  billingCycle    String       @default("MONTHLY")
+  nextRenewalDate DateTime
+  isActive        Boolean      @default(true)
+  tier            String?
+  websiteUrl      String?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+model Debt {
+  id                 String       @id @default(uuid())
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  creditorName       String
+  totalAmount        Decimal      @db.Decimal(14, 2)
+  remainingAmount    Decimal      @db.Decimal(14, 2)
+  currency           Currency     @default(DOP)
+  interestRate       Decimal?     @db.Decimal(5, 2)
+  totalInstallments  Int?
+  paidInstallments   Int          @default(0)
+  dueDate            DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  payments           DebtPayment[]
+  transactions       Transaction[]
+  vaultDocuments     VaultDocument[]
+
+  @@index([userId])
+  @@map("debts")
+}
+
+model DebtPayment {
+  id            String      @id @default(uuid())
+  debtId        String
+  debt          Debt        @relation(fields: [debtId], references: [id], onDelete: Cascade)
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  amount        Decimal     @db.Decimal(14, 2)
+  principalPart Decimal     @db.Decimal(14, 2)
+  interestPart  Decimal     @default(0.0) @db.Decimal(14, 2)
+  paymentDate   DateTime    @default(now())
+
+  @@map("debt_payments")
+}
+
+model Person {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  loans          Loan[]
+  vaultDocuments VaultDocument[]
+  ideaPartners   IdeaPartner[]
+
+  @@index([userId])
+  @@map("people")
+}
+
+model Loan {
+  id              String       @id @default(uuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  personId        String
+  person          Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  type            LoanType     @default(I_LENT)
+  amount          Decimal      @db.Decimal(14, 2)
+  remainingAmount Decimal      @db.Decimal(14, 2)
+  currency        Currency     @default(DOP)
+  expectedDate    DateTime?
+  concept         String?
+  isSettled       Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  collections    LoanCollection[]
+  transactions   Transaction[]
+  vaultDocuments VaultDocument[]
+
+  @@index([userId])
+  @@map("loans")
+}
+
+model LoanCollection {
+  id            String      @id @default(uuid())
+  loanId        String
+  loan          Loan        @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  amount        Decimal     @db.Decimal(14, 2)
+  date          DateTime    @default(now())
+
+  @@map("loan_collections")
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  color       String        @default("#16a34a")
+  status      String        @default("ACTIVE")
+  budget      Decimal?      @db.Decimal(14, 2)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  transactions   Transaction[]
+  vaultDocuments VaultDocument[]
+  idea           Idea?
+
+  @@index([userId])
+  @@map("projects")
+}
+
+model InstallmentPlan {
+  id                String    @id @default(uuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  
+  description       String
+  totalAmount       Decimal   @db.Decimal(14, 2)
+  installmentsCount Int
+  paidCount         Int       @default(0)
+  installmentAmount Decimal   @db.Decimal(14, 2)
+  monthlyInterest   Decimal?  @db.Decimal(5, 2)
+  startMonth        DateTime
+  status            String    @default("ACTIVE")
+  createdAt         DateTime  @default(now())
+
+  @@map("installment_plans")
+}
+
+model CardStatement {
+  id             String    @id @default(uuid())
+  accountId      String
+  account        Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  cycleStartDate DateTime
+  cycleEndDate   DateTime
+  closingBalance Decimal   @db.Decimal(14, 2)
+  minimumPayment Decimal   @db.Decimal(14, 2)
+  dueDate        DateTime
+  status         String    @default("OPEN")
+  createdAt      DateTime  @default(now())
+
+  @@map("card_statements")
+}
+
+model StatementImport {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId    String
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  filename     String
+  format       String
+  totalRows    Int       @default(0)
+  importedRows Int       @default(0)
+  status       String    @default("COMPLETED")
+  createdAt    DateTime  @default(now())
+
+  @@map("statement_imports")
+}
+
+model RawEvent {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source       RawEventSource
+  rawPayload   String         @db.Text
+  parsedJson   Json?
+  status       RawEventStatus @default(PENDING)
+  bankId       String?
+  bank         Bank?          @relation(fields: [bankId], references: [id], onDelete: SetNull)
+  errorMessage String?
+  createdAt    DateTime       @default(now())
+
+  @@index([userId, status])
+  @@map("raw_events")
+}
+
+model MerchantRule {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pattern     String
+  merchantId  String
+  merchant    Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  autoConfirm Boolean   @default(false)
+  priority    Int       @default(1)
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@map("merchant_rules")
+}
+
+model Alert {
+  id          String        @id @default(uuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String
+  severity    AlertSeverity @default(INFO)
+  title       String
+  message     String
+  actionUrl   String?
+  isRead      Boolean       @default(false)
+  isDismissed Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+
+  @@index([userId, isRead])
+  @@map("alerts")
+}
+
+model ExchangeRate {
+  id           String   @id @default(uuid())
+  fromCurrency Currency
+  toCurrency   Currency
+  rate         Decimal  @db.Decimal(10, 4)
+  date         DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@unique([fromCurrency, toCurrency, date])
+  @@map("exchange_rates")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType String
+  entityId   String
+  action     String
+  beforeState Json?
+  afterState  Json?
+  metadata    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, entityType, entityId])
+  @@map("audit_logs")
+}
+
+// ----------------------------------------------------
+// 1. SECURE GATE (SESIONES SEGURAS STEP-UP)
+// ----------------------------------------------------
+
+model SecureSession {
+  id             String      @id @default(uuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope          SecureScope // VAULT | IDEAS
+  tokenHash      String      @unique
+  expiresAt      DateTime
+  lastActivityAt DateTime    @default(now())
+  revokedAt      DateTime?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime    @default(now())
+
+  @@index([userId, scope])
+  @@map("secure_sessions")
+}
+
+model SecurityEvent {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventType String       // UNLOCK_SUCCESS, UNLOCK_FAILED, TIMEOUT_LOCK, MANUAL_LOCK, RATE_LIMITED
+  scope     SecureScope?
+  success   Boolean
+  reason    String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@map("security_events")
+}
+
+// ----------------------------------------------------
+// 2. BÓVEDA DE DOCUMENTOS (VAULT)
+// ----------------------------------------------------
+
+model VaultFolder {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentId    String?
+  parent      VaultFolder?    @relation("FolderHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children    VaultFolder[]   @relation("FolderHierarchy")
+
+  name        String
+  color       String          @default("#1e40af")
+  icon        String          @default("folder")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  documents   VaultDocument[]
+
+  @@unique([userId, parentId, name])
+  @@map("vault_folders")
+}
+
+model VaultDocument {
+  id             String           @id @default(uuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId       String?
+  folder         VaultFolder?     @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  title          String
+  category       DocumentCategory @default(OTHER)
+  subType        String?
+  issuer         String?
+  documentNumber String?          // Cifrado a nivel de columna
+  
+  issueDate      DateTime?
+  expiryDate     DateTime?
+  status         DocumentStatus   @default(ACTIVE)
+  notes          String?          @db.Text
+  isFavorite     Boolean          @default(false)
+  isDeleted      Boolean          @default(false)
+  deletedAt      DateTime?
+
+  // Vínculos opcionales
+  personId       String?
+  person         Person?          @relation(fields: [personId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  debtId         String?
+  debt           Debt?            @relation(fields: [debtId], references: [id], onDelete: SetNull)
+  loanId         String?
+  loan           Loan?            @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  ideaId         String?
+  idea           Idea?            @relation(fields: [ideaId], references: [id], onDelete: SetNull)
+
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  files          VaultFile[]
+  tags           VaultDocumentTag[]
+  accessLogs     VaultAccessLog[]
+
+  @@index([userId, category])
+  @@index([userId, expiryDate])
+  @@index([userId, isDeleted])
+  @@map("vault_documents")
+}
+
+model VaultFile {
+  id               String        @id @default(uuid())
+  documentId       String
+  document         VaultDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  version          Int           @default(1)
+  originalName     String
+  mimeType         String
+  sizeBytes        Int
+  sha256           String
+  storageKey       String
+  
+  // Envelope Encryption
+  encryptedDataKey String
+  iv               String
+  authTag          String
+
+  thumbnailKey     String?
+  pageCount        Int?
+  ocrText          String?       @db.Text
+  createdAt        DateTime      @default(now())
+
+  @@index([sha256])
+  @@map("vault_files")
+}
+
+model VaultTag {
+  id        String             @id @default(uuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  color     String             @default("#38bdf8")
+
+  documents VaultDocumentTag[]
+
+  @@unique([userId, name])
+  @@map("vault_tags")
+}
+
+model VaultDocumentTag {
+  documentId String
+  document   VaultDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  tagId      String
+  tag        VaultTag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([documentId, tagId])
+  @@map("vault_document_tags")
+}
+
+model VaultAccessLog {
+  id         String        @id @default(uuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documentId String
+  document   VaultDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  action     String        // VIEW, DOWNLOAD, UPDATE, DELETE, RESTORE
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime      @default(now())
+
+  @@index([userId, documentId])
+  @@map("vault_access_logs")
+}
+
+// ----------------------------------------------------
+// 3. LABORATORIO DE IDEAS Y NEGOCIOS (IDEALAB)
+// ----------------------------------------------------
+
+model Idea {
+  id             String          @id @default(uuid())
+  userId         String
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title          String
+  oneLinePitch   String?
+  description    String?         @db.Text
+  type           IdeaType        @default(PERSONAL)
+  stage          IdeaStage       @default(SEED)
+  category       String?
+  priority       Int             @default(3)
+  isConfidential Boolean         @default(false)
+
+  impactScore     Int            @default(5)
+  confidenceScore Int            @default(5)
+  easeScore       Int            @default(5)
+  iceScore        Decimal        @default(0.0) @db.Decimal(5, 2)
+
+  projectId      String?         @unique
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  partners       IdeaPartner[]
+  tasks          IdeaTask[]
+  notes          IdeaNote[]
+  canvas         IdeaCanvas?
+  swot           IdeaSwot?
+  competitors    IdeaCompetitor[]
+  decisions      IdeaDecision[]
+  financialModel IdeaFinancialModel?
+  stageHistory   IdeaStageHistory[]
+  lesson         IdeaLesson?
+  documents      VaultDocument[]
+
+  @@index([userId, stage])
+  @@index([userId, iceScore])
+  @@map("ideas")
+}
+
+model IdeaPartner {
+  id          String   @id @default(uuid())
+  ideaId      String
+  idea        Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  personId    String
+  person      Person   @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  role        String
+  sharePct    Decimal  @default(0.0) @db.Decimal(5, 2)
+  commitment  String?
+  createdAt   DateTime @default(now())
+
+  @@unique([ideaId, personId])
+  @@map("idea_partners")
+}
+
+model IdeaTask {
+  id          String    @id @default(uuid())
+  ideaId      String
+  idea        Idea      @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  title       String
+  isCompleted Boolean   @default(false)
+  dueDate     DateTime?
+  priority    Int       @default(1)
+  createdAt   DateTime  @default(now())
+
+  @@map("idea_tasks")
+}
+
+model IdeaNote {
+  id        String   @id @default(uuid())
+  ideaId    String
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("idea_notes")
+}
+
+model IdeaCanvas {
+  id               String   @id @default(uuid())
+  ideaId           String   @unique
+  idea             Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  problem          String?  @db.Text
+  solution         String?  @db.Text
+  valueProposition String?  @db.Text
+  customerSegments String?  @db.Text
+  channels         String?  @db.Text
+  revenueStreams   String?  @db.Text
+  costStructure    String?  @db.Text
+  keyMetrics       String?  @db.Text
+  unfairAdvantage  String?  @db.Text
+  updatedAt        DateTime @updatedAt
+
+  @@map("idea_canvases")
+}
+
+model IdeaSwot {
+  id            String   @id @default(uuid())
+  ideaId        String   @unique
+  idea          Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  strengths     String?  @db.Text
+  weaknesses    String?  @db.Text
+  opportunities String?  @db.Text
+  threats       String?  @db.Text
+  updatedAt     DateTime @updatedAt
+
+  @@map("idea_swots")
+}
+
+model IdeaCompetitor {
+  id          String   @id @default(uuid())
+  ideaId      String
+  idea        Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  name        String
+  website     String?
+  strengths   String?
+  weaknesses  String?
+  differentiation String?
+  createdAt   DateTime @default(now())
+
+  @@map("idea_competitors")
+}
+
+model IdeaDecision {
+  id        String   @id @default(uuid())
+  ideaId    String
+  idea      Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  title     String
+  rationale String   @db.Text
+  date      DateTime @default(now())
+
+  @@map("idea_decisions")
+}
+
+model IdeaFinancialModel {
+  id                 String   @id @default(uuid())
+  ideaId             String   @unique
+  idea               Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  initialInvestment  Decimal  @default(0.0) @db.Decimal(14, 2)
+  monthlyFixedCosts  Decimal  @default(0.0) @db.Decimal(14, 2)
+  variableCostPerUnit Decimal @default(0.0) @db.Decimal(14, 2)
+  targetPricePerUnit Decimal  @default(0.0) @db.Decimal(14, 2)
+  estimatedUnitsMonth Int     @default(0)
+
+  breakEvenUnits     Int?
+  estimatedPaybackMonths Decimal? @db.Decimal(5, 1)
+  pessimisticROI     Decimal? @db.Decimal(6, 2)
+  baseROI            Decimal? @db.Decimal(6, 2)
+  optimisticROI      Decimal? @db.Decimal(6, 2)
+
+  updatedAt          DateTime @updatedAt
+
+  @@map("idea_financial_models")
+}
+
+model IdeaStageHistory {
+  id        String    @id @default(uuid())
+  ideaId    String
+  idea      Idea      @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  fromStage IdeaStage
+  toStage   IdeaStage
+  reason    String?
+  createdAt DateTime  @default(now())
+
+  @@map("idea_stage_history")
+}
+
+model IdeaLesson {
+  id          String   @id @default(uuid())
+  ideaId      String   @unique
+  idea        Idea     @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  reasonWhy   String   @db.Text
+  keyLearning String   @db.Text
+  createdAt   DateTime @default(now())
+
+  @@map("idea_lessons")
+}
+
+// ----------------------------------------------------
+// 4. MÓDULO PROYECTOS DE VIDA (LIFE PROJECTS)
+// ----------------------------------------------------
+
+model LifeProject {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  area        LifeArea        @default(FINANCIAL_FREEDOM)
+  vision      String?         @db.Text
+  targetYear  Int?
+  status      String          @default("IN_PROGRESS")
+  progressPct Int             @default(0)
+
+  goalId      String?
+  projectId   String?
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  milestones  LifeMilestone[]
+
+  @@index([userId, area])
+  @@map("life_projects")
+}
+
+model LifeMilestone {
+  id            String      @id @default(uuid())
+  lifeProjectId String
+  lifeProject   LifeProject @relation(fields: [lifeProjectId], references: [id], onDelete: Cascade)
+
+  title         String
+  targetDate    DateTime?
+  isCompleted   Boolean     @default(false)
+  completedAt   DateTime?
+  notes         String?
+  createdAt     DateTime    @default(now())
+
+  @@map("life_milestones")
+}
+
+// ----------------------------------------------------
+// 5. MÓDULO DE PLANIFICACIÓN Y DIVISIÓN DE QUINCENAS
+// ----------------------------------------------------
+
+enum QuincenaStatus {
+  PLANNED       // Planificada previo al cobro
+  RECEIVED      // Nómina depositada/detectada
+  CLOSED        // Quincena finalizada
+}
+
+enum AllocationCategory {
+  FIXED_EXPENSE      // Renta, servicios, internet, mantenimiento
+  DEBT_CREDIT_CARD   // Tarjetas de crédito, préstamos, cuotas
+  LIVING_EXPENSES    // Supermercado, comida, combustible, movilidad
+  SAVINGS_GOALS      // Ahorro quincenal, fondo de emergencia, metas
+  DISCRETIONARY      // Gastos personales, salidas, imprevistos
+}
+
+model QuincenaPlan {
+  id                    String              @id @default(uuid())
+  userId                String
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name                  String              // Ej: "1ra Quincena Septiembre 2026"
+  periodNumber          Int                 // 1 o 2
+  month                 Int                 // 1 - 12
+  year                  Int
+  startDate             DateTime
+  endDate               DateTime
+  payDate               DateTime
+  expectedIncome        Decimal             @db.Decimal(14, 2)
+  actualIncome          Decimal?            @db.Decimal(14, 2)
+  currency              Currency            @default(DOP)
+  status                QuincenaStatus      @default(PLANNED)
+  detectedTransactionId String?
+  notes                 String?
+
+  allocations           QuincenaAllocation[]
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@unique([userId, year, month, periodNumber])
+  @@index([userId, payDate])
+  @@map("quincena_plans")
+}
+
+model QuincenaAllocation {
+  id                    String              @id @default(uuid())
+  quincenaPlanId        String
+  quincenaPlan          QuincenaPlan        @relation(fields: [quincenaPlanId], references: [id], onDelete: Cascade)
+
+  name                  String              // Ej: "Alquiler", "Tarjeta Banreservas"
+  category              AllocationCategory  @default(FIXED_EXPENSE)
+  expectedAmount        Decimal             @db.Decimal(14, 2)
+  actualAmount          Decimal?            @db.Decimal(14, 2)
+  isPaid                Boolean             @default(false)
+  paidAt                DateTime?
+  dueDate               DateTime?
+  priority              String              @default("HIGH") // HIGH, MEDIUM, LOW
+  notes                 String?
+
+  linkedDebtId          String?
+  linkedSubscriptionId  String?
+  linkedGoalId          String?
+
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([quincenaPlanId, category])
+  @@map("quincena_allocations")
+}
+
+// ----------------------------------------------------
+// MÓDULO DE UNIVERSIDAD & GASTOS ESTUDIANTILES
+// ----------------------------------------------------
+
+enum UniversityExpenseCategory {
+  TUITION_FEE       // Matrícula, inscripción o cuota mensual de la universidad
+  TRANSPORT         // Pasaje, concho, metro, Uber o gasolina hacia/desde la universidad
+  FOOD_SNACKS       // Cafetería, almuerzo, merienda o bebidas en la universidad
+  MATERIALS_BOOKS   // Libros, fotocopias, guías, útiles, proyectos y laboratorios
+  WASTE_LEISURE     // Malgasto, ocio, salidas o antojos innecesarios en tiempo de universidad
+  OTHER             // Carnet, derechos de examen, graduación, trámites
+}
+
+model UniversityExpense {
+  id              String                    @id @default(uuid())
+  userId          String
+  user            User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title           String                    // Ej: "Pago Cuota 2", "Uber Examen Final", "Empanadas Cafetería"
+  category        UniversityExpenseCategory @default(TUITION_FEE)
+  amount          Decimal                   @db.Decimal(14, 2)
+  currency        Currency                  @default(DOP)
+  expenseDate     DateTime
+  termSemester    String?                   // Ej: "2026-C1", "2026-C2", "Semestre 1-2026"
+  isWaste         Boolean                   @default(false) // Bandera de "Malgasto" / Antojo innecesario
+
+  subject         String?                   // Materia o asignatura opcional (ej: Cálculo II, Programación)
+  location        String?                   // Ubicación (ej: Cafetería Campus, Fotocopiadora, Parada Metro)
+  paymentMethod   String?                   // Efectivo, Tarjeta, Transferencia, etc.
+  accountId       String?                   // Cuenta bancaria o tarjeta de origen opcional
+  transactionId   String?                   // ID de transacción contable si fue sincronizada
+
+  notes           String?
+
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@index([userId, expenseDate])
+  @@index([userId, category])
+  @@index([userId, isWaste])
+  @@map("university_expenses")
+}
+
+// ----------------------------------------------------
+// MÓDULO DE INVENTARIO PERSONAL (ROPA, ACCESORIOS, GASTABLES)
+// ----------------------------------------------------
+
+enum InventoryCategory {
+  CLOTHING          // Ropa, camisas, pantalones, abrigos
+  FOOTWEAR          // Zapatos, tenis, sandalias
+  ACCESSORIES       // Relojes, lentes, cadenas, mochilas, carteras
+  CONSUMABLES       // Materiales gastables, aseo, papelería, perfumes
+  TECH_GADGETS      // Laptops, audífonos, celulares, cargadores
+  HOME_PERSONAL     // Artículos de uso personal en casa, herramientas
+  OTHER             // Otros activos
+}
+
+enum ItemCondition {
+  BRAND_NEW         // Nuevo / Sellado
+  EXCELLENT         // Excelente estado
+  GOOD              // Buen estado
+  FAIR              // Regular / Con desgaste
+  DAMAGED           // Dañado / Para reparar o desechar
+  UNKNOWN           // Desconocido / Sin evaluar
+}
+
+model PersonalInventoryItem {
+  id              String            @id @default(uuid())
+  userId          String
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name            String            // Ej: "Tenis Nike Air Max", "Perfume Bleu de Chanel"
+  category        InventoryCategory @default(CLOTHING)
+  condition       ItemCondition     @default(UNKNOWN)
+  rating          Int?              // Calificación de 1 a 5 estrellas
+  purchasePrice   Decimal?          @db.Decimal(14, 2) // Precio de compra original
+  estimatedValue  Decimal?          @db.Decimal(14, 2) // Valor actual estimado
+  currency        Currency          @default(DOP)
+
+  purchaseDate    DateTime?         // Fecha de adquisición
+  usageTimeText   String?           // Ej: "8 meses", "2 años", "Nuevo"
+  isConsumable    Boolean           @default(false)    // Material gastable
+  quantity        Int               @default(1)
+
+  location        String?           // Ej: "Armario Principal", "Gaveta Habitación", "Mochila"
+  brand           String?           // Marca (ej: "Nike", "Zara", "Apple")
+  colorOrDetails  String?           // Talla, color o especificaciones
+  notes           String?
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([userId, category])
+  @@index([userId, condition])
+  @@index([userId, rating])
+  @@map("personal_inventory_items")
+}
+
+// ----------------------------------------------------
+// MÓDULO DE CONTRASEÑAS & CUENTAS DE APPS POR CORREO
+// ----------------------------------------------------
+
+model AppCredential {
+  id               String           @id @default(uuid())
+  userId           String
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  appName          String           // Ej: "Google / Gmail", "GitHub", "Netflix", "Banco Popular", "Discord"
+  linkedEmail      String           // Correo vinculado (ej: "pelier.dev@gmail.com")
+  usernameOrHandle String?          // Usuario, handle o alias
+  password         String           // Contraseña
+  websiteUrl       String?          // URL de login
+  hasTwoFactor     Boolean          @default(false) // 2FA activo
+  category         String           @default("GENERAL") // Streaming, Trabajo, Finanzas, Redes, Gaming
+  notes            String?          // Preguntas de seguridad, pins o notas
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([userId, linkedEmail])
+  @@index([userId, appName])
+  @@map("app_credentials")
+}
+
+

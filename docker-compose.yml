@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: micualto_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-micualto_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-micualto_secret}
+      POSTGRES_DB: ${DB_NAME:-micualto_db}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-micualto_user} -d ${DB_NAME:-micualto_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+    driver: local
